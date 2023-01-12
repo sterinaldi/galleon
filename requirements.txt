@@ -1,0 +1,3 @@
+figaro
+tqdm
+pycbc
