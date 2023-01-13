@@ -1,5 +1,6 @@
 import numpy as np
 import h5py
+from tqdm import tqdm
 from pathlib import Path
 
 from figaro.load import _find_redshift
@@ -43,7 +44,7 @@ def chirp_mass_eta(m1, m2):
     eta = m1*m2/(m1+m2)**2
     return Mc, eta
 
-def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd = 'aLIGOZeroDetHighPower', deltaf = 1/40., flow = 10.):
+def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd = 'aLIGOZeroDetHighPower', deltaf = 1/16., flow = 20.):
     '''
     Compute the SNR from m1, m2, z.
     Follows Davide Gerosa's code (https://github.com/dgerosa/gwdet).
@@ -88,7 +89,7 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
         snr[i] = sigma(hp, psd=evaluatedpsd, low_frequency_cutoff=flow)
     return snr
 
-def obs_distance(m1, m2, z, w_obs, snr_obs):
+def obs_distance(m1_obs, m2_obs, z, w_obs, snr_obs):
     """
     Compute the observed luminosity distance given detector-frame masses, redshift, w and SNR.
     
@@ -112,6 +113,7 @@ def PE_prior(w, DL, volume = 1., n_det  = 'one'):
     Arguments:
         :np.ndarray w:  observed w parameter
         :np.ndarray DL: observed luminosity distance
+        :double volume: normalising volume
         :str n_det:     number of detectors ('one' or 'three')
     
     Returns:
@@ -139,7 +141,7 @@ def jacobian(m1, m2, DL, z, w):
     Returns:
         :np.ndarray: jacobian
     """
-    snr_opt = snr_optimal(m1_obs/(1+z), m2_obs/(1+z), np.ones(len(m1_obs))*z, np.ones(len(m1_obs))*d_fid)
+    snr_opt = snr_optimal(m1/(1+z), m2/(1+z), np.ones(len(m1))*z, np.ones(len(m1))*d_fid)
     Mc, eta = chirp_mass_eta(m1, m2)
     return w*snr_opt*(d_fid/DL**2)*((m1-m2)/(m1+m2)**2)*(eta**(3./5.))
 
@@ -166,7 +168,7 @@ def save_event(m1, m2, Mc, q, z, DL, snr, name = 'injections', out_folder = '.')
                   'mass_2_source': m2,
                   'mass_1': m1*(1+z),
                   'mass_2': m2*(1+z),
-                  'chirp_mass_source': mc,
+                  'chirp_mass_source': Mc,
                   'total_mass_source': m1+m2,
                   'mass_ratio': q,
                   'redshift': z,
