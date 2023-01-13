@@ -74,7 +74,7 @@ def eta_sampler(eta, snr_obs, n_draws = 1e3):
     max_L_eta = truncnorm(a = lowclip, b = highclip, loc = eta, scale = sigma_eta/snr_obs).rvs()
     # Sampling
     samples = np.zeros(shape = (len(eta), int(n_draws)))
-    for i, (eta_i, snr_i) in enumerate(zip(eta, snr_obs)):
+    for i, (eta_i, snr_i) in enumerate(zip(max_L_eta, snr_obs)):
         lowclip = -eta_i/(sigma_eta/snr_i)
         highclip = (0.25-eta_i)/(sigma_eta/snr_i)
         samples[i] = truncnorm(a = lowclip, b = highclip, loc = eta_i, scale = sigma_eta/snr_i).rvs(int(n_draws))
@@ -96,10 +96,10 @@ def w_sampler(w, snr_obs, n_draws = 1e3):
     lowclip = -w/(sigma_w/snr_obs)
     highclip = (1.-w)/(sigma_w/snr_obs)
     # Maximum likelihood value
-    max_L_theta = truncnorm(a = lowclip, b = highclip, loc = theta, scale = sigma_w/snr_obs).rvs()
+    max_L_w = truncnorm(a = lowclip, b = highclip, loc = w, scale = sigma_w/snr_obs).rvs()
     # Sampling
     samples = np.zeros(shape = (len(w), int(n_draws)))
-    for i, (w_i, snr_i) in enumerate(zip(w, snr_obs)):
+    for i, (w_i, snr_i) in enumerate(zip(max_L_w, snr_obs)):
         lowclip = -w_i/(sigma_w/snr_i)
         highclip = (1.-w_i)/(sigma_w/snr_i)
         samples[i] = truncnorm(a = lowclip, b = highclip, loc = w_i, scale = sigma_w/snr_i).rvs(int(n_draws))
