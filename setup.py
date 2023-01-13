@@ -38,7 +38,7 @@ setup(
     include_dirs = ['galleon', numpy.get_include()],
     setup_requires=['numpy', 'cython'],
     package_data={"": ['*.c', '*.pyx', '*.pxd']},
-    version='0.0.1',
+    version='1.0.0',
     long_description=long_description,
     long_description_content_type='text/markdown',
     )
