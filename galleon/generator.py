@@ -9,12 +9,12 @@ from galleon.settings import omega
 mass_parameters_list = ['m1m2', 'm1q']
 
 class Generator:
-    def __init__(self, bounds_m,
+    def __init__(self, bounds_m  = [5,100],
                        bounds_z  = None,
                        bounds_d  = None,
                        bounds_q  = None,
                        n_det     = 'one',
-                       mass_pars = 'm1m2',
+                       mass_pars = 'm1q',
                        dist_par  = 'z',
                        snr_cut   = 8.,
                        ):
@@ -34,7 +34,7 @@ class Generator:
         Returns:
             :Generator: instance of Generator class
         """
-        self.bounds_m = [m_min, m_max]
+        self.bounds_m = bounds_m
         if bounds_q is not None:
             self.bounds_q = bounds_q
         else:
@@ -123,25 +123,25 @@ class Generator:
         """
         # Masses
         m1_temp = rejection_sampler(int(n_samps), self.mass_distribution, self.bounds_m)
-        if mass_pars = 'm1m2':
+        if mass_pars == 'm1m2':
             m2_temp = rejection_sampler(int(n_samps), self.mass_distribution, self.bounds_m)
             m1 = np.array([m1i if m1i > m2i else m2i for m1i, m2i in zip(m1_temp, m2_temp)])
             m2 = np.array([m2i if m1i > m2i else m1i for m1i, m2i in zip(m1_temp, m2_temp)])
-        if mass_pars = 'm1q':
+        if mass_pars == 'm1q':
             q  = rejection_sampler(int(n_samps), self.mass_ratio_distribution, self.bounds_q)
             m1 = m1_temp
             m2 = q*m1
         # Redshift
-        if dist_par = 'z':
+        if dist_par == 'z':
             z = rejection_sampler(int(n_samps), self.redshift_distribution, self.bounds_z)
-        if dist_par = 'DL':
+        if dist_par == 'DL':
             d = rejection_sampler(int(n_samps), self.luminosity_distance_distribution, self.bounds_d)
             z = np.array([_find_redshift(omega, di) for di in tqdm(d, desc = 'Converting to z')])
         # w
         w = w_from_interpolant(int(n_samps), self.n_det)
         return m1, m2, z, w
 
-    def generate_binaries(self, n_obs)
+    def generate_binaries(self, n_obs):
         """
         Generate a catalog of existing binaries (both observable and unobservable) containing n_events observable binaries.
         A binary is observable if snr_obs > snr_cut
@@ -166,16 +166,17 @@ class Generator:
         eta     = np.array([])
         DL      = np.array([])
         z       = np.array([])
+        w       = np.array([])
         snr_obs = np.array([])
         while observed < n_obs:
-            m1_temp, m2_temp, z_temp, w_temp = self.sample_binary_parameters(n_events, self.mass_pars, self.dist_par)
+            m1_temp, m2_temp, z_temp, w_temp = self.sample_binary_parameters(n_obs, self.mass_pars, self.dist_par)
             m1z_temp          = m1_temp*(1+z_temp)
             m2z_temp          = m2_temp*(1+z_temp)
             Mc_temp, eta_temp = chirp_mass_eta(m1z_temp, m2z_temp)
             DL_temp           = omega.LuminosityDistance(z_temp)
             # Generate SNRs
             snr_opt_temp  = snr_optimal(m1_temp, m2_temp, z = z_temp, DL = DL_temp)
-            snr_true_temp = w*snr_opt_temp
+            snr_true_temp = w_temp*snr_opt_temp
             snr_obs_temp  = snr_sampler(snr_true_temp)
             observed += len(np.where(snr_obs_temp > self.snr_cut)[0])
             # Extend
@@ -185,19 +186,21 @@ class Generator:
             eta     = np.append(eta, eta_temp)
             DL      = np.append(DL, DL_temp)
             z       = np.append(z, z_temp)
+            w       = np.append(w, w_temp)
             snr_obs = np.append(snr_obs, snr_obs_temp)
         # Trim arrays
-        last    = np.wnere(snr_obs > self.snr_cut)[0][n_obs]
+        last    = np.where(snr_obs > self.snr_cut)[0][n_obs]
         m1      = m1[:last]
         m2      = m2[:last]
         Mc      = Mc[:last]
         eta     = eta[:last]
         DL      = DL[:last]
         z       = z[:last]
+        w       = w[:last]
         snr_obs = snr_obs[:last]
-        return m1, m2, Mc, eta, DL, z, snr_obs
+        return m1, m2, Mc, eta, DL, z, w, snr_obs
 
-    def generate_posteriors(self, n_events, n_samps, out_folder):
+    def generate_posteriors(self, n_events, n_samps = 1e4, out_folder = '.'):
         """
         Generate a set of single-event posterior distributions.
         
@@ -206,15 +209,15 @@ class Generator:
             :int n_samps:            number of samples per event
             :str or Path out_folder: folder where to save the posteriors
         """
-        # Prepare folders
-        self.out_folder = Path(out_folder)
-        self.events_folder = Path(self.out_folder, 'events')
-        if not self.events_folder.exists():
-            self.events_folder.mkdir()
         # Catalog identifier
         id       = np.random.randint(int(1e6))
         cat_name = 'MDC_'+str(id)
-        m1, m2, Mc, eta, DL, z, snr_obs = self.generate_binaries(n_events)
+        # Prepare folders
+        self.out_folder = Path(out_folder)
+        self.events_folder = Path(self.out_folder, cat_name)
+        if not self.events_folder.exists():
+            self.events_folder.mkdir()
+        m1, m2, Mc, eta, DL, z, w, snr_obs = self.generate_binaries(n_events)
         # Save true values
         if self.snr_cut > 0.:
             # Save full catalog
@@ -227,6 +230,7 @@ class Generator:
         eta     = eta[idx_obs]
         DL      = DL[idx_obs]
         z       = z[idx_obs]
+        w       = w[idx_obs]
         snr_obs = snr_obs[idx_obs]
         # Save observed catalog
         save_event(m1, m2, Mc/(1+z), m2/m1, z, DL, snr_obs, name = cat_name + '_obs', out_folder = self.out_folder)
@@ -236,19 +240,27 @@ class Generator:
         w_events   = w_sampler(w, snr_obs, int(n_samps))
         # Transform to (m1z, m2z, DL, w)
         m1z_events, m2z_events = component_masses(Mc_events, eta_events)
-        DL_events = np.array([obs_distance(m1z_i, m2z_i, z_i, w_i, snr_i) for m1z_i, m2z_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, z, w_events, snr_obs), desc = 'Sampling DL')])
-        z_events = np.array([_find_redshift(omega, DL_i) for DL_i in tqdm(DL_events, desc = 'Converting to z')])
+        DL_events = np.array([obs_distance(m1z_i, m2z_i, z_i, w_i, snr_i) for m1z_i, m2z_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, z, w_events, snr_obs), desc = 'Sampling DL', total = n_events)])
+        z_events = np.array([np.array([_find_redshift(omega, d) for d in DL_i]) for DL_i in tqdm(DL_events, desc = 'Converting to z', total = n_events)])
+        # Final lists
+        m1_final = []
+        m2_final = []
+        Mc_final = []
+        DL_final = []
+        z_final  = []
+        q_final  = []
         # Reweight to account for prior
-        for m1z_i, m2z_i, MC_i, DL_i, z_i, w_i in tqdm(enumerate(zip(m1z_events, m2z_events, Mc_events, DL_events, z_events, w_events)), desc = 'Reweighting posteriors', total = n_events):
-            p = PE_prior(w_i, DL_i, n_det = self.n_det, volume = self.volume)/jacobian(m1z_i, m2z_i, DL_i, z_i, w_i)
-            vals = np.random.uniform(len(p))*np.max(p)
+        for m1z_i, m2z_i, Mc_i, DL_i, z_i, w_i in tqdm(zip(m1z_events, m2z_events, Mc_events, DL_events, z_events, w_events), desc = 'Reweighting posteriors', total = n_events):
+            p  = PE_prior(w_i, DL_i, n_det = self.n_det, volume = self.volume)*jacobian(m1z_i, m2z_i, DL_i, z_i, w_i)
+            p /= p.sum()
+            vals = np.random.uniform(size = len(p))*np.max(p)
             idx = np.where(p > vals)
             # Resampling
-            m1z_events[i] = m1z_i[idx]
-            m2z_events[i] = m2z_i[idx]
-            Mc_events[i]  = Mc_i[idx]
-            DL_events[i]  = D_i[idx]
-            z_events[i]   = z_i[idx]
-            w_events[i]   = w_i[idx]
+            m1_final.append(m1z_i[idx]/(1+z_i[idx]))
+            m2_final.append(m2z_i[idx]/(1+z_i[idx]))
+            Mc_final.append(Mc_i[idx]/(1+z_i[idx]))
+            DL_final.append(DL_i[idx])
+            z_final.append(z_i[idx])
+            q_final.append(m2z_i[idx]/m1z_i[idx])
         # Save posteriors
-        save_posteriors(m1z_events/(1+z_events), m2z_events/(1+z_events), Mc_events/(1+z_events), m2z_events/m1z_events, z_events, DL_events, snr_obs, name = cat_name, out_folder = self.events_folder)
+        save_posteriors(m1_final, m2_final, Mc_final, q_final, z_final, DL_final, snr_obs, name = cat_name, out_folder = self.events_folder)
