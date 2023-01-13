@@ -1,3 +1,4 @@
 figaro
 tqdm
 pycbc
+h5py
