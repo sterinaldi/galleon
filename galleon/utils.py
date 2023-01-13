@@ -1,4 +1,7 @@
 import numpy as np
+import h5py
+from pathlib import Path
+
 from figaro.load import _find_redshift
 
 from pycbc.waveform import get_fd_waveform
@@ -65,7 +68,7 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
     if z is None:
         z = np.array([_find_redshift(omega, d) for d in DL])
     
-    for i, (m1i, m2i, zi, Di) in tqdm(enumerate(zip(m1, m2, z, DL)), total = len(m1), desc = 'Optimal SNR'):
+    for i, (m1i, m2i, zi, Di) in enumerate(zip(m1, m2, z, DL)):
         # FIXME: add spin parameters!
         hp, hc = get_fd_waveform(approximant = approximant,
                                  mass1       = m1i*(1.+zi),
@@ -102,7 +105,7 @@ def obs_distance(m1, m2, z, w_obs, snr_obs):
     snr_opt = snr_optimal(m1_obs/(1+z), m2_obs/(1+z), np.ones(len(m1_obs))*z, np.ones(len(m1_obs))*d_fid)
     return d_fid*w_obs*snr_opt/snr_obs
 
-def PE_prior(w, DL, n_det  = 'one'):
+def PE_prior(w, DL, volume = 1., n_det  = 'one'):
     """
     Prior used in PE runs.
     
@@ -120,7 +123,7 @@ def PE_prior(w, DL, n_det  = 'one'):
         pdf = p_w_3det
     else:
         raise ValueError("Invalid n_det. Please provide 'one' or 'three'.")
-    return pdf(w)*DL**2
+    return pdf(w)*DL**2/volume
 
 def jacobian(m1, m2, DL, z, w):
     """
@@ -139,3 +142,55 @@ def jacobian(m1, m2, DL, z, w):
     snr_opt = snr_optimal(m1_obs/(1+z), m2_obs/(1+z), np.ones(len(m1_obs))*z, np.ones(len(m1_obs))*d_fid)
     Mc, eta = chirp_mass_eta(m1, m2)
     return w*snr_opt*(d_fid/DL**2)*((m1-m2)/(m1+m2)**2)*(eta**(3./5.))
+
+def save_event(m1, m2, Mc, q, z, DL, snr, name = 'injections', out_folder = '.'):
+    """
+    Save samples to h5 file, formatted using the same convention as LVK.
+    
+    Arguments:
+        :np.ndarray m1:          source-frame primary masses
+        :np.ndarray m2:          source-frame secondary masses
+        :np.ndarray Mc:          source-frame chirp masses
+        :np.ndarray q:           mass ratios
+        :np.ndarray z:           redshifts
+        :np.ndarray DL:          luminosity distances
+        :np.ndarray snr:         observed SNRs
+        :str name:               file name
+        :str or Path out_folder: folder
+    """
+    file = Path(out_folder, name + '.h5')
+    with h5py.File(file, 'w') as f:
+        ps = f.create_group('MDC/posterior_samples')
+        # Dictionary
+        dict_v = {'mass_1_source': m1,
+                  'mass_2_source': m2,
+                  'mass_1': m1*(1+z),
+                  'mass_2': m2*(1+z),
+                  'chirp_mass_source': mc,
+                  'total_mass_source': m1+m2,
+                  'mass_ratio': q,
+                  'redshift': z,
+                  'luminosity_distance': DL,
+                  'snr': snr,
+                  }
+        for key, value in dict_v.items():
+            ps.create_dataset(key, data = value)
+
+def save_posteriors(m1, m2, Mc, q, z, DL, snr, name = 'injections', out_folder = '.'):
+    """
+    Save posterior samples to h5 files, formatted using the same convention as LVK.
+    
+    Arguments:
+        :np.ndarray m1:          source-frame primary mass sets
+        :np.ndarray m2:          source-frame secondary mass sets
+        :np.ndarray Mc:          source-frame chirp mass sets
+        :np.ndarray q:           mass ratio sets
+        :np.ndarray z:           redshift sets
+        :np.ndarray DL:          luminosity distance sets
+        :np.ndarray snr:         observed SNRs
+        :str name:               catalog name
+        :str or Path out_folder: folder
+    """
+    for i, (m1i, m2i, Mci, qi, zi, DLi, snri) in tqdm(enumerate(zip(m1, m2, Mc, q, z, DL, snr)), total = len(m1), desc = 'Saving'):
+        file_name = '{0}_{1}'.format(name, i+1)
+        save_event(m1i, m2i, Mci, qi, zi, DLi, snri*np.ones(len(m1i)), file_name, out_folder)
