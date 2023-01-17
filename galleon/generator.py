@@ -240,8 +240,10 @@ class Generator:
         w_events   = w_sampler(w, snr_obs, int(n_samps))
         # Transform to (m1z, m2z, DL, w)
         m1z_events, m2z_events = component_masses(Mc_events, eta_events)
-        DL_events = np.array([obs_distance(m1z_i, m2z_i, z_i, w_i, snr_i) for m1z_i, m2z_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, z, w_events, snr_obs), desc = 'Sampling DL', total = n_events)])
-        z_events = np.array([np.array([_find_redshift(omega, d) for d in DL_i]) for DL_i in tqdm(DL_events, desc = 'Converting to z', total = n_events)])
+        DL_and_snr  = np.array([obs_distance_snr(m1z_i, m2z_i, z_i, w_i, snr_i) for m1z_i, m2z_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, z, w_events, snr_obs), desc = 'Sampling DL and SNR', total = n_events)])
+        DL_events   = DL_and_snr[:,0,:]
+        snr_events  = DL_and_snr[:,1,:]
+        z_events    = np.array([np.array([_find_redshift(omega, d) for d in DL_i]) for DL_i in tqdm(DL_events, desc = 'Converting to z', total = n_events)])
         # Final lists
         m1_final = []
         m2_final = []
@@ -250,8 +252,8 @@ class Generator:
         z_final  = []
         q_final  = []
         # Reweight to account for prior
-        for m1z_i, m2z_i, Mc_i, DL_i, z_i, w_i in tqdm(zip(m1z_events, m2z_events, Mc_events, DL_events, z_events, w_events), desc = 'Reweighting posteriors', total = n_events):
-            p  = PE_prior(w_i, DL_i, n_det = self.n_det, volume = self.volume)*jacobian(m1z_i, m2z_i, DL_i, z_i, w_i)
+        for m1z_i, m2z_i, Mc_i, DL_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, Mc_events, DL_events, z_events, w_events, snr_events), desc = 'Reweighting posteriors', total = n_events):
+            p  = PE_prior(w_i, DL_i, n_det = self.n_det, volume = self.volume)*jacobian(m1z_i, m2z_i, DL_i, z_i, w_i, snr_i)
             p /= p.sum()
             vals = np.random.uniform(size = len(p))*np.max(p)
             idx = np.where(p > vals)
