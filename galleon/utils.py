@@ -89,7 +89,7 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
         snr[i] = sigma(hp, psd=evaluatedpsd, low_frequency_cutoff=flow)
     return snr
 
-def obs_distance(m1_obs, m2_obs, z, w_obs, snr_obs):
+def obs_distance_snr(m1_obs, m2_obs, z, w_obs, snr_obs):
     """
     Compute the observed luminosity distance given detector-frame masses, redshift, w and SNR.
     
@@ -102,9 +102,10 @@ def obs_distance(m1_obs, m2_obs, z, w_obs, snr_obs):
         
     Returns:
         :np.ndarray: observed luminosity distance
+        :np.ndarray
     """
     snr_opt = snr_optimal(m1_obs/(1+z), m2_obs/(1+z), np.ones(len(m1_obs))*z, np.ones(len(m1_obs))*d_fid)
-    return d_fid*w_obs*snr_opt/snr_obs
+    return d_fid*w_obs*snr_opt/snr_obs, snr_opt
 
 def PE_prior(w, DL, volume = 1., n_det  = 'one'):
     """
@@ -127,7 +128,7 @@ def PE_prior(w, DL, volume = 1., n_det  = 'one'):
         raise ValueError("Invalid n_det. Please provide 'one' or 'three'.")
     return pdf(w)*DL**2/volume
 
-def jacobian(m1, m2, DL, z, w):
+def jacobian(m1, m2, DL, z, w, snr):
     """
     Jacobian of the coordinate change from (snr, Mc, eta, w) to (m1, m2, DL, w).
     
@@ -141,7 +142,7 @@ def jacobian(m1, m2, DL, z, w):
     Returns:
         :np.ndarray: jacobian
     """
-    snr_opt = snr_optimal(m1/(1+z), m2/(1+z), np.ones(len(m1))*z, np.ones(len(m1))*d_fid)
+    snr_opt = snr*d_fid/DL
     Mc, eta = chirp_mass_eta(m1, m2)
     return w*snr_opt*(d_fid/DL**2)*((m1-m2)/(m1+m2)**2)*(eta**(3./5.))
 
