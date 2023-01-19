@@ -180,7 +180,7 @@ class Generator:
             # Generate SNRs
             snr_opt_temp  = snr_optimal(m1_temp, m2_temp, z = z_temp, DL = DL_temp)
             snr_true_temp = w_temp*snr_opt_temp
-            snr_obs_temp  = snr_sampler(snr_true_temp)
+            snr_obs_temp  = np.abs(snr_sampler(snr_true_temp))
             acc = len(np.where(snr_obs_temp > self.snr_cut)[0])
             # Progress bar
             count.update(np.min((acc, n_obs-observed)))
@@ -246,7 +246,7 @@ class Generator:
         w_events   = w_sampler(w, snr_obs, int(n_samps))
         # Transform to (m1z, m2z, DL, w)
         m1z_events, m2z_events = component_masses(Mc_events, eta_events)
-        DL_and_snr  = np.array([obs_distance_snr(m1z_i, m2z_i, z_i, w_i, snr_i) for m1z_i, m2z_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, z, w_events, snr_obs), desc = 'Sampling DL and SNR', total = n_events)])
+        DL_and_snr  = np.array([obs_distance_snr(m1z_i, m2z_i, z_i, w_i, snr_i, bounds_m = self.bounds_m) for m1z_i, m2z_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, z, w_events, snr_obs), desc = 'Sampling DL and SNR', total = n_events)])
         DL_events   = DL_and_snr[:,0,:]
         snr_events  = DL_and_snr[:,1,:]
         z_events    = np.array([np.array([_find_redshift(omega, d) for d in DL_i]) for DL_i in tqdm(DL_events, desc = 'Converting to z', total = n_events)])
@@ -259,16 +259,21 @@ class Generator:
         q_final  = []
         # Reweight to account for prior
         for m1z_i, m2z_i, Mc_i, DL_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, Mc_events, DL_events, z_events, w_events, snr_events), desc = 'Reweighting posteriors', total = n_events):
-            p  = PE_prior(w_i, DL_i, n_det = self.n_det, volume = self.volume)*jacobian(m1z_i, m2z_i, DL_i, z_i, w_i, snr_i)
-            p /= p.sum()
+            idx_snr = np.where(snr_i > 0.)[0]
+            p  = PE_prior(w_i[idx_snr], DL_i[idx_snr], n_det = self.n_det, volume = self.volume)*jacobian(m1z_i[idx_snr], m2z_i[idx_snr], DL_i[idx_snr], z_i[idx_snr], w_i[idx_snr], snr_i[idx_snr])
+            if len(p) == 0:
+                # fix for irrealistic events
+                p = np.ones(len(m1z_i))
+                idx_snr = np.ones(len(m1z_i), dtype = int)
+            p = p/p.sum()
             vals = np.random.uniform(size = len(p))*np.max(p)
             idx = np.where(p > vals)
             # Resampling
-            m1_final.append(m1z_i[idx]/(1+z_i[idx]))
-            m2_final.append(m2z_i[idx]/(1+z_i[idx]))
-            Mc_final.append(Mc_i[idx]/(1+z_i[idx]))
-            DL_final.append(DL_i[idx])
-            z_final.append(z_i[idx])
-            q_final.append(m2z_i[idx]/m1z_i[idx])
+            m1_final.append((m1z_i[idx_snr])[idx]/(1+(z_i[idx_snr])[idx]))
+            m2_final.append((m2z_i[idx_snr])[idx]/(1+(z_i[idx_snr])[idx]))
+            Mc_final.append((Mc_i[idx_snr])[idx]/(1+(z_i[idx_snr])[idx]))
+            DL_final.append((DL_i[idx_snr])[idx])
+            z_final.append((z_i[idx_snr])[idx])
+            q_final.append((m2z_i[idx_snr])[idx]/(m1z_i[idx_snr])[idx])
         # Save posteriors
         save_posteriors(m1_final, m2_final, Mc_final, q_final, z_final, DL_final, snr_obs, name = cat_name, out_folder = self.events_folder)
