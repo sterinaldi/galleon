@@ -2,6 +2,7 @@ import numpy as np
 from pathlib import Path
 from scipy.interpolate import UnivariateSpline
 from figaro.cosmology import CosmologicalParameters
+from figaro.load import _find_redshift
 
 # Cosmology (Planck 2018)
 omega = CosmologicalParameters(0.674, 0.315, 0.685, -1., 0.)
@@ -20,4 +21,5 @@ snr_th    = 8.
 sigma_Mc  = 0.08*snr_th
 sigma_eta = 0.022*snr_th
 sigma_w   = 0.21*snr_th
-d_fid     = 300
+d_fid     = 300.
+z_fid     = _find_redshift(omega, d_fid)
