@@ -1,4 +1,6 @@
 import numpy as np
+from tqdm import tqdm
+
 from figaro.utils import rejection_sampler
 from figaro.load import _find_redshift
 
@@ -168,6 +170,7 @@ class Generator:
         z       = np.array([])
         w       = np.array([])
         snr_obs = np.array([])
+        count = tqdm(total = n_obs, desc = 'Generating binaries')
         while observed < n_obs:
             m1_temp, m2_temp, z_temp, w_temp = self.sample_binary_parameters(n_obs, self.mass_pars, self.dist_par)
             m1z_temp          = m1_temp*(1+z_temp)
@@ -178,7 +181,10 @@ class Generator:
             snr_opt_temp  = snr_optimal(m1_temp, m2_temp, z = z_temp, DL = DL_temp)
             snr_true_temp = w_temp*snr_opt_temp
             snr_obs_temp  = snr_sampler(snr_true_temp)
-            observed += len(np.where(snr_obs_temp > self.snr_cut)[0])
+            acc = len(np.where(snr_obs_temp > self.snr_cut)[0])
+            # Progress bar
+            count.update(np.min((acc, n_obs-observed)))
+            observed += acc
             # Extend
             m1      = np.append(m1, m1_temp)
             m2      = np.append(m2, m2_temp)
@@ -189,15 +195,15 @@ class Generator:
             w       = np.append(w, w_temp)
             snr_obs = np.append(snr_obs, snr_obs_temp)
         # Trim arrays
-        last    = np.where(snr_obs > self.snr_cut)[0][n_obs]
-        m1      = m1[:last]
-        m2      = m2[:last]
-        Mc      = Mc[:last]
-        eta     = eta[:last]
-        DL      = DL[:last]
-        z       = z[:last]
-        w       = w[:last]
-        snr_obs = snr_obs[:last]
+        last    = np.where(snr_obs > self.snr_cut)[0][n_obs-1]
+        m1      = m1[:last+1]
+        m2      = m2[:last+1]
+        Mc      = Mc[:last+1]
+        eta     = eta[:last+1]
+        DL      = DL[:last+1]
+        z       = z[:last+1]
+        w       = w[:last+1]
+        snr_obs = snr_obs[:last+1]
         return m1, m2, Mc, eta, DL, z, w, snr_obs
 
     def generate_posteriors(self, n_events, n_samps = 1e4, out_folder = '.'):
