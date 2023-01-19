@@ -9,7 +9,7 @@ from pycbc.waveform import get_fd_waveform
 from pycbc.psd.analytical import from_string
 from pycbc.filter import sigma
 
-from galleon.settings import d_fid, p_w_1det, p_w_3det
+from galleon.settings import d_fid, z_fid, p_w_1det, p_w_3det
 
 def component_masses(Mc, eta):
     """
@@ -44,7 +44,7 @@ def chirp_mass_eta(m1, m2):
     eta = m1*m2/(m1+m2)**2
     return Mc, eta
 
-def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd = 'aLIGOZeroDetHighPower', deltaf = 1/16., flow = 20.):
+def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd = 'aLIGOZeroDetHighPower', deltaf = 1/16., flow = 20., bounds_m = None):
     '''
     Compute the SNR from m1, m2, z.
     Follows Davide Gerosa's code (https://github.com/dgerosa/gwdet).
@@ -57,6 +57,7 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
         :str psd:         psd to be used
         :double deltaf:   frequency bin
         :double flow:     lower frequency
+        :iter bounds_m:   mass bounds
     
     Returns:
         :np.ndarray: optimal SNRs
@@ -69,8 +70,20 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
     if z is None:
         z = np.array([_find_redshift(omega, d) for d in DL])
     
-    for i, (m1i, m2i, zi, Di) in enumerate(zip(m1, m2, z, DL)):
+    if bounds_m is not None:
+        idx = (m1 > bounds_m[0]) & (m1 < bounds_m[1])
+    else:
+        idx = np.ones(len(m1))
+    
+    for i, (m1i, m2i, zi, Di, idxi) in enumerate(zip(m1, m2, z, DL, idx)):
         # FIXME: add spin parameters!
+        # Check WF validity
+        if approximant == 'IMRPhenomXPHM':
+            if m1i/m2i > 20.:
+                continue
+        # Check primary mass in mass bounds
+        if not idxi:
+            continue
         hp, hc = get_fd_waveform(approximant = approximant,
                                  mass1       = m1i*(1.+zi),
                                  mass2       = m2i*(1.+zi),
@@ -84,12 +97,11 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
                                    deltaf,
                                    flow,
                                    )
-                                   
         # Keep only hp polarisation (face-on binary)
         snr[i] = sigma(hp, psd=evaluatedpsd, low_frequency_cutoff=flow)
     return snr
 
-def obs_distance_snr(m1_obs, m2_obs, z, w_obs, snr_obs):
+def obs_distance_snr(m1_obs, m2_obs, z, w_obs, snr_obs, bounds_m = None):
     """
     Compute the observed luminosity distance given detector-frame masses, redshift, w and SNR.
     
@@ -99,12 +111,13 @@ def obs_distance_snr(m1_obs, m2_obs, z, w_obs, snr_obs):
         :double z:           true redshift
         :np.ndarray w_obs:   observed w
         :np.ndarray snr_obs: observed SNR
+        :iter bounds_m:   mass bounds
         
     Returns:
         :np.ndarray: observed luminosity distance
         :np.ndarray
     """
-    snr_opt = snr_optimal(m1_obs/(1+z), m2_obs/(1+z), np.ones(len(m1_obs))*z, np.ones(len(m1_obs))*d_fid)
+    snr_opt = snr_optimal(m1_obs/(1+z), m2_obs/(1+z), np.ones(len(m1_obs))*z_fid, np.ones(len(m1_obs))*d_fid, bounds_m = bounds_m)
     return d_fid*w_obs*snr_opt/snr_obs, snr_opt
 
 def PE_prior(w, DL, volume = 1., n_det  = 'one'):
