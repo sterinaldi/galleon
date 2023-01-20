@@ -8,11 +8,6 @@ from distutils.extension import Extension
 import os
 import warnings
 
-try:
-    from Cython.Build import cythonize
-except ImportError:
-    raise ImportError("Cython not found. Please install it via\n\tpip install Cython")
-
 with open("requirements.txt") as requires_file:
     requirements = requires_file.read().split("\n")
 with open("README.md") as readme_file:
@@ -38,7 +33,7 @@ setup(
     include_dirs = ['galleon', numpy.get_include()],
     setup_requires=['numpy', 'cython'],
     package_data={"": ['*.c', '*.pyx', '*.pxd']},
-    version='1.0.2',
+    version='1.1.0',
     long_description=long_description,
     long_description_content_type='text/markdown',
     )
