@@ -206,7 +206,7 @@ class Generator:
         snr_obs = snr_obs[:last+1]
         return m1, m2, Mc, eta, DL, z, w, snr_obs
 
-    def generate_posteriors(self, n_events, n_samps = 1e4, out_folder = '.'):
+    def generate_posteriors(self, n_events, n_samps = 1e4, out_folder = '.', id = None):
         """
         Generate a set of single-event posterior distributions.
         
@@ -216,7 +216,8 @@ class Generator:
             :str or Path out_folder: folder where to save the posteriors
         """
         # Catalog identifier
-        id       = np.random.randint(int(1e6))
+        if id == None:
+            id = np.random.randint(int(1e6))
         cat_name = 'MDC_'+str(id)
         # Prepare folders
         self.out_folder = Path(out_folder)
