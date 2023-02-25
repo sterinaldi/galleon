@@ -11,26 +11,27 @@ from pycbc.filter import sigma
 
 from galleon.settings import d_fid, z_fid, p_w_1det, p_w_3det
 
-def component_masses(Mc, eta):
+def component_masses(Mc, q):
     """
     Detector-frame component masses from detector-frame chirp mass and symmetric mass ratio.
     
     Arguments:
         :np.ndarray Mc:  detector-frame chirp mass
-        :np.ndarray eta: symmetric mass ratio
+        :np.ndarray q:   mass ratio
     
     Returns:
         :np.ndarray: detector-frame primary mass
         :np.ndarray: detector-frame secondary mass
     """
-    M  = Mc/(eta**(3./5.))
-    m1 = M*(1 + np.sqrt(1. - 4.*eta))/2.
-    m2 = M*(1 - np.sqrt(1. - 4.*eta))/2.
+    eta = q/(1+q)**2
+    M   = Mc/(eta**(3./5.))
+    m1  = M*(1 + np.sqrt(1. - 4.*eta))/2.
+    m2  = M*(1 - np.sqrt(1. - 4.*eta))/2.
     return m1, m2
 
-def chirp_mass_eta(m1, m2):
+def chirp_mass_q(m1, m2):
     """
-    Symmetric mass ratio and detector-frame chirp mass from detector-frame component masses
+    Mass ratio and detector-frame chirp mass from detector-frame component masses
     
     Arguments:
         :np.ndarray m1: detector-frame primary mass
@@ -38,11 +39,11 @@ def chirp_mass_eta(m1, m2):
     
     Returns:
         :np.ndarray: detector-frame chirp mass
-        :np.ndarray: symmetric mass ratio
+        :np.ndarray: mass ratio
     """
     Mc = (m1*m2)**(3./5.)/(m1+m2)**(1./5.)
-    eta = m1*m2/(m1+m2)**2
-    return Mc, eta
+    q  = m1/m2
+    return Mc, q
 
 def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd = 'aLIGOZeroDetHighPower', deltaf = 1/16., flow = 20., bounds_m = None):
     '''

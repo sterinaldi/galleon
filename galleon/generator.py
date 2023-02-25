@@ -165,7 +165,7 @@ class Generator:
         m1      = np.array([])
         m2      = np.array([])
         Mc      = np.array([])
-        eta     = np.array([])
+        q       = np.array([])
         DL      = np.array([])
         z       = np.array([])
         w       = np.array([])
@@ -173,10 +173,10 @@ class Generator:
         count = tqdm(total = n_obs, desc = 'Generating binaries')
         while observed < n_obs:
             m1_temp, m2_temp, z_temp, w_temp = self.sample_binary_parameters(n_obs, self.mass_pars, self.dist_par)
-            m1z_temp          = m1_temp*(1+z_temp)
-            m2z_temp          = m2_temp*(1+z_temp)
-            Mc_temp, eta_temp = chirp_mass_eta(m1z_temp, m2z_temp)
-            DL_temp           = omega.LuminosityDistance(z_temp)
+            m1z_temp        = m1_temp*(1+z_temp)
+            m2z_temp        = m2_temp*(1+z_temp)
+            Mc_temp, q_temp = chirp_mass_q(m1z_temp, m2z_temp)
+            DL_temp         = omega.LuminosityDistance(z_temp)
             # Generate SNRs
             snr_opt_temp  = snr_optimal(m1_temp, m2_temp, z = z_temp, DL = DL_temp)
             snr_true_temp = w_temp*snr_opt_temp
@@ -189,7 +189,7 @@ class Generator:
             m1      = np.append(m1, m1_temp)
             m2      = np.append(m2, m2_temp)
             Mc      = np.append(Mc, Mc_temp)
-            eta     = np.append(eta, eta_temp)
+            q       = np.append(q, q_temp)
             DL      = np.append(DL, DL_temp)
             z       = np.append(z, z_temp)
             w       = np.append(w, w_temp)
@@ -199,12 +199,12 @@ class Generator:
         m1      = m1[:last+1]
         m2      = m2[:last+1]
         Mc      = Mc[:last+1]
-        eta     = eta[:last+1]
+        q       = q[:last+1]
         DL      = DL[:last+1]
         z       = z[:last+1]
         w       = w[:last+1]
         snr_obs = snr_obs[:last+1]
-        return m1, m2, Mc, eta, DL, z, w, snr_obs
+        return m1, m2, Mc, q, DL, z, w, snr_obs
 
     def generate_posteriors(self, n_events, n_samps = 1e4, out_folder = '.', id = None):
         """
@@ -224,29 +224,29 @@ class Generator:
         self.events_folder = Path(self.out_folder, cat_name)
         if not self.events_folder.exists():
             self.events_folder.mkdir()
-        m1, m2, Mc, eta, DL, z, w, snr_obs = self.generate_binaries(n_events)
+        m1, m2, Mc, q, DL, z, w, snr_obs = self.generate_binaries(n_events)
         # Save true values
         if self.snr_cut > 0.:
             # Save full catalog
-            save_event(m1, m2, Mc/(1+z), m2/m1, z, DL, snr_obs, name = cat_name + '_full', out_folder = self.out_folder)
+            save_event(m1, m2, Mc/(1+z), q, z, DL, snr_obs, name = cat_name + '_full', out_folder = self.out_folder)
         idx_obs = np.where(snr_obs > self.snr_cut)
         # Keeping only observed binaries
         m1      = m1[idx_obs]
         m2      = m2[idx_obs]
         Mc      = Mc[idx_obs]
-        eta     = eta[idx_obs]
+        q       = q[idx_obs]
         DL      = DL[idx_obs]
         z       = z[idx_obs]
         w       = w[idx_obs]
         snr_obs = snr_obs[idx_obs]
         # Save observed catalog
-        save_event(m1, m2, Mc/(1+z), m2/m1, z, DL, snr_obs, name = cat_name + '_obs', out_folder = self.out_folder)
-        # Generate posteriors for each (Mc, eta, z, w)
-        Mc_events  = Mc_sampler(Mc, snr_obs, int(n_samps))
-        eta_events = eta_sampler(eta, snr_obs, int(n_samps))
-        w_events   = w_sampler(w, snr_obs, int(n_samps))
+        save_event(m1, m2, Mc/(1+z), q, z, DL, snr_obs, name = cat_name + '_obs', out_folder = self.out_folder)
+        # Generate posteriors for each (Mc, q, z, w)
+        Mc_events = Mc_sampler(Mc, snr_obs, int(n_samps))
+        q_events  = q_sampler(q, snr_obs, int(n_samps))
+        w_events  = w_sampler(w, snr_obs, int(n_samps))
         # Transform to (m1z, m2z, DL, w)
-        m1z_events, m2z_events = component_masses(Mc_events, eta_events)
+        m1z_events, m2z_events = component_masses(Mc_events, q_events)
         DL_and_snr  = np.array([obs_distance_snr(m1z_i, m2z_i, z_i, w_i, snr_i, bounds_m = self.bounds_m) for m1z_i, m2z_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, z, w_events, snr_obs), desc = 'Sampling DL and SNR', total = n_events)])
         DL_events   = DL_and_snr[:,0,:]
         snr_events  = DL_and_snr[:,1,:]

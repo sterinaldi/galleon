@@ -5,7 +5,7 @@ from tqdm import tqdm
 from scipy.stats import truncnorm
 from figaro.utils import rejection_sampler
 
-from galleon.settings import omega, p_w_1det, p_w_3det, snr_th, sigma_Mc, sigma_eta, sigma_w
+from galleon.settings import omega, p_w_1det, p_w_3det, snr_th, sigma_Mc, sigma_q, sigma_w
 
 def w_from_interpolant(n_draws, n_det = 'one'):
     """
@@ -55,9 +55,9 @@ def Mc_sampler(Mc, snr_obs, n_draws = 1e3):
     max_L_Mc = np.random.normal(loc = np.log(Mc), scale = sigma_Mc/snr_obs)
     return np.array([np.exp(np.random.normal(loc = Mc_i, scale = sigma_Mc/snr_i, size = int(n_draws))) for Mc_i, snr_i in zip(max_L_Mc, snr_obs)])
 
-def eta_sampler(eta, snr_obs, n_draws = 1e3):
+def q_sampler(q, n_draws = 1e3):
     """
-    Produces symmetric mass ratio posterior samples given true values.
+    Produces mass ratio posterior samples given true values.
     
     Arguments:
         :np.ndarray eta:     true symmetric mass ratio values
@@ -67,18 +67,8 @@ def eta_sampler(eta, snr_obs, n_draws = 1e3):
     Returns:
         :np.ndarray: set of single-event posterior samples
     """
-    # Bounds
-    lowclip = -eta/(sigma_eta/snr_obs)
-    highclip = (0.25-eta)/(sigma_eta/snr_obs)
-    # Maximum likelihood value
-    max_L_eta = truncnorm(a = lowclip, b = highclip, loc = eta, scale = sigma_eta/snr_obs).rvs()
-    # Sampling
-    samples = np.zeros(shape = (len(eta), int(n_draws)))
-    for i, (eta_i, snr_i) in enumerate(zip(max_L_eta, snr_obs)):
-        lowclip = -eta_i/(sigma_eta/snr_i)
-        highclip = (0.25-eta_i)/(sigma_eta/snr_i)
-        samples[i] = truncnorm(a = lowclip, b = highclip, loc = eta_i, scale = sigma_eta/snr_i).rvs(int(n_draws))
-    return samples
+    max_L_q = np.random.normal(loc = np.log(q/(1-q)), scale = sigma_q)
+    return np.array([1/(1+np.exp(-np.random.normal(loc = y, scale = sigma_q, size = n_draws))) for y in max_L_q])
 
 def w_sampler(w, snr_obs, n_draws = 1e3):
     """

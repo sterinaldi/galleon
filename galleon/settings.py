@@ -19,7 +19,7 @@ p_w_3det      = UnivariateSpline(data_P_w_3det['w'], data_P_w_3det['p_w'][::-1],
 # Parameters (from Appendix A of https://iopscience.iop.org/article/10.3847/2041-8213/ab77c9/pdf)
 snr_th    = 8.
 sigma_Mc  = 0.08*snr_th
-sigma_eta = 0.022*snr_th
+sigma_q   = 1.067
 sigma_w   = 0.21*snr_th
 d_fid     = 300.
 z_fid     = _find_redshift(omega, d_fid)
