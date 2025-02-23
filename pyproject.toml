@@ -1,0 +1,50 @@
+[build-system]
+requires = [
+    "oldest-supported-numpy",
+    "setuptools>=42",
+    "wheel",
+    "build",
+    ]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ['galleon']
+
+[project]
+name = 'galleon'
+description = 'LVK observing run simulator'
+version = '1.0.0'
+requires-python = '>= 3.9, < 3.13'
+readme = {file = "README.md", content-type = "text/markdown"}
+license = {file = "LICENSE"}
+keywords = ['DPGMM', 'HDPGMM', 'figaro', 'hierarchical', 'inference']
+authors = [
+  {name = "Stefano Rinaldi", email = "stefano.rinaldi@uni-heidelberg.de"},
+  {name = "Walter Del Pozzo", email = "walter.delpozzo@unipi.it"},
+  ]
+
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  'Topic :: Scientific/Engineering :: Astronomy',
+  'Topic :: Scientific/Engineering :: Physics',
+]
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "figaro",
+    "tqdm",
+    "pycbc",
+    "h5py",
+    ]
+
+[project.urls]
+Repository = "https://github.com/sterinaldi/galleon.git"
+Issues = "https://github.com/sterinaldi/galleon/issues"
