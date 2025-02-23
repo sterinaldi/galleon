@@ -2,10 +2,11 @@ import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 
-from scipy.stats import truncnorm
+from scipy.stats import norm, truncnorm
 from figaro.utils import rejection_sampler
 
-from galleon.settings import omega, p_w_1det, p_w_3det, snr_th, sigma_Mc, sigma_q, sigma_w
+from galleon.settings import omega, p_w_1det, p_w_3det, snr_th, sigma_Mc, sigma_eta, sigma_w
+from galleon.utils import q_from_eta
 
 def w_from_interpolant(n_draws, n_det = 'one'):
     """
@@ -21,7 +22,7 @@ def w_from_interpolant(n_draws, n_det = 'one'):
     if n_det == 'one':
         pdf = p_w_1det
         bounds = [0.,1.]
-    elif det == 'three':
+    elif n_det == 'three':
         pdf = p_w_3det
         bounds = [0.,1.4]
     else:
@@ -52,10 +53,9 @@ def Mc_sampler(Mc, snr_obs, n_draws = 1e3):
     Returns:
         :np.ndarray: set of single-event posterior samples
     """
-    max_L_Mc = np.random.normal(loc = np.log(Mc), scale = sigma_Mc/snr_obs)
-    return np.array([np.exp(np.random.normal(loc = Mc_i, scale = sigma_Mc/snr_i, size = int(n_draws))) for Mc_i, snr_i in zip(max_L_Mc, snr_obs)])
+    return np.exp(norm(loc = np.log(Mc), scale = sigma_Mc/snr_obs).rvs(size = (int(n_draws), len(Mc)))).T
 
-def q_sampler(q, n_draws = 1e3):
+def q_sampler(q, snr_obs, n_draws = 1e3):
     """
     Produces mass ratio posterior samples given true values.
     
@@ -67,8 +67,10 @@ def q_sampler(q, n_draws = 1e3):
     Returns:
         :np.ndarray: set of single-event posterior samples
     """
-    max_L_q = np.random.normal(loc = np.log(q/(1-q)), scale = sigma_q)
-    return np.array([1/(1+np.exp(-np.random.normal(loc = y, scale = sigma_q, size = n_draws))) for y in max_L_q])
+    eta         = q#/(1+q)**2
+    eta_samples = truncnorm(a = -eta/(sigma_eta/snr_obs), b = (1.-eta)/(sigma_eta/snr_obs), loc = eta, scale = sigma_eta/snr_obs).rvs((int(n_draws),len(q))).T
+    return eta_samples
+#    return q_from_eta(eta_samples)
 
 def w_sampler(w, snr_obs, n_draws = 1e3):
     """
@@ -85,12 +87,4 @@ def w_sampler(w, snr_obs, n_draws = 1e3):
     # Bounds
     lowclip = -w/(sigma_w/snr_obs)
     highclip = (1.-w)/(sigma_w/snr_obs)
-    # Maximum likelihood value
-    max_L_w = truncnorm(a = lowclip, b = highclip, loc = w, scale = sigma_w/snr_obs).rvs()
-    # Sampling
-    samples = np.zeros(shape = (len(w), int(n_draws)))
-    for i, (w_i, snr_i) in enumerate(zip(max_L_w, snr_obs)):
-        lowclip = -w_i/(sigma_w/snr_i)
-        highclip = (1.-w_i)/(sigma_w/snr_i)
-        samples[i] = truncnorm(a = lowclip, b = highclip, loc = w_i, scale = sigma_w/snr_i).rvs(int(n_draws))
-    return samples
+    return truncnorm(a = lowclip, b = highclip, loc = w, scale = sigma_w/snr_obs).rvs((int(n_draws),len(w))).T

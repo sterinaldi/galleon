@@ -3,13 +3,14 @@ import h5py
 from tqdm import tqdm
 from pathlib import Path
 
-from figaro.load import _find_redshift
-
 from pycbc.waveform import get_fd_waveform
 from pycbc.psd.analytical import from_string
 from pycbc.filter import sigma
 
 from galleon.settings import d_fid, z_fid, p_w_1det, p_w_3det
+
+def q_from_eta(eta):
+    return ((1-2*eta) - np.sqrt((2*eta-1)**2 - 4*eta**2))/(2*eta)
 
 def component_masses(Mc, q):
     """
@@ -42,10 +43,26 @@ def chirp_mass_q(m1, m2):
         :np.ndarray: mass ratio
     """
     Mc = (m1*m2)**(3./5.)/(m1+m2)**(1./5.)
-    q  = m1/m2
+    q  = m2/m1
     return Mc, q
 
-def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd = 'aLIGOZeroDetHighPower', deltaf = 1/16., flow = 20., bounds_m = None):
+def chirp_mass_eta(m1, m2):
+    """
+    Symmetric mass ratio and detector-frame chirp mass from detector-frame component masses
+    
+    Arguments:
+        :np.ndarray m1: detector-frame primary mass
+        :np.ndarray m2: detector-frame secondary mass
+    
+    Returns:
+        :np.ndarray: detector-frame chirp mass
+        :np.ndarray: mass ratio
+    """
+    Mc = (m1*m2)**(3./5.)/(m1+m2)**(1./5.)
+    eta  = m1*m2/((m1+m2)**2)
+    return Mc, eta
+
+def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd = 'aLIGOZeroDetHighPower', deltaf = 1/16., flow = 20., bounds_m = None, sensitivity = False):
     '''
     Compute the SNR from m1, m2, z.
     Follows Davide Gerosa's code (https://github.com/dgerosa/gwdet).
@@ -69,22 +86,24 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
     if DL is None:
         DL = omega.LuminosityDistance(z)
     if z is None:
-        z = np.array([_find_redshift(omega, d) for d in DL])
+        z = omega.Redshift(DL)
     
     if bounds_m is not None:
         idx = (m1 > bounds_m[0]) & (m1 < bounds_m[1])
     else:
         idx = np.ones(len(m1))
     
-    for i, (m1i, m2i, zi, Di, idxi) in enumerate(zip(m1, m2, z, DL, idx)):
+    if sensitivity:
+        loop = tqdm(enumerate(zip(m1, m2, z, DL, idx)), desc = 'Generating sensitivity estimate', total = len(m1))
+    else:
+        loop = enumerate(zip(m1, m2, z, DL, idx))
+    
+    for i, (m1i, m2i, zi, Di, idxi) in loop:
         # FIXME: add spin parameters!
         # Check WF validity
         if approximant == 'IMRPhenomXPHM':
             if m1i/m2i > 20.:
                 continue
-        # Check primary mass in mass bounds
-        if not idxi:
-            continue
         hp, hc = get_fd_waveform(approximant = approximant,
                                  mass1       = m1i*(1.+zi),
                                  mass2       = m2i*(1.+zi),
@@ -136,7 +155,7 @@ def PE_prior(w, DL, volume = 1., n_det  = 'one'):
     """
     if n_det == 'one':
         pdf = p_w_1det
-    elif det == 'three':
+    elif n_det == 'three':
         pdf = p_w_3det
     else:
         raise ValueError("Invalid n_det. Please provide 'one' or 'three'.")
@@ -211,3 +230,42 @@ def save_posteriors(m1, m2, Mc, q, z, DL, snr, name = 'injections', out_folder =
     for i, (m1i, m2i, Mci, qi, zi, DLi, snri) in tqdm(enumerate(zip(m1, m2, Mc, q, z, DL, snr)), total = len(m1), desc = 'Saving'):
         file_name = '{0}_{1}'.format(name, i+1)
         save_event(m1i, m2i, Mci, qi, zi, DLi, snri*np.ones(len(m1i)), file_name, out_folder)
+
+def save_injections(m1, m2, Mc, q, z, DL, snr, p_m1, p_m2, p_z, p_dl, n_total, name = 'injections', out_folder = '.'):
+    """
+    Save samples to h5 file, formatted using the same convention as LVK.
+    
+    Arguments:
+        :np.ndarray m1:          source-frame primary masses
+        :np.ndarray m2:          source-frame secondary masses
+        :np.ndarray Mc:          source-frame chirp masses
+        :np.ndarray q:           mass ratios
+        :np.ndarray z:           redshifts
+        :np.ndarray DL:          luminosity distances
+        :np.ndarray snr:         observed SNRs
+        :str name:               file name
+        :str or Path out_folder: folder
+    """
+    file = Path(out_folder, name + '.h5')
+    with h5py.File(file, 'w') as f:
+        ps = f.create_group('injections')
+        ps.attrs['total_generated'] = n_total
+        ps.attrs['analysis_time_s'] = (60.*60.*24.*365)
+        # Dictionary
+        dict_v = {'mass_1_source': m1,
+                  'mass_2_source': m2,
+                  'mass_1': m1*(1+z),
+                  'mass_2': m2*(1+z),
+                  'chirp_mass_source': Mc,
+                  'total_mass_source': m1+m2,
+                  'mass_ratio': q,
+                  'redshift': z,
+                  'luminosity_distance': DL,
+                  'mass1_source_sampling_pdf': p_m1,
+                  'mass1_source_mass2_source_sampling_pdf': p_m1*p_m2,
+                  'redshift_sampling_pdf': p_z,
+                  'luminosity_distance_sampling_pdf': p_dl,
+                  'snr': snr,
+                  }
+        for key, value in dict_v.items():
+            ps.create_dataset(key, data = value)
