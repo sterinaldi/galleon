@@ -5,8 +5,7 @@ from tqdm import tqdm
 from scipy.stats import norm, truncnorm
 from figaro.utils import rejection_sampler
 
-from galleon.settings import omega, p_w_1det, p_w_3det, snr_th, sigma_Mc, sigma_eta, sigma_w
-from galleon.utils import q_from_eta
+from galleon.settings import omega, p_w_1det, p_w_3det, snr_th, sigma_Mc, sigma_q, sigma_w
 
 def w_from_interpolant(n_draws, n_det = 'one'):
     """
@@ -67,10 +66,8 @@ def q_sampler(q, snr_obs, n_draws = 1e3):
     Returns:
         :np.ndarray: set of single-event posterior samples
     """
-    eta         = q#/(1+q)**2
-    eta_samples = truncnorm(a = -eta/(sigma_eta/snr_obs), b = (1.-eta)/(sigma_eta/snr_obs), loc = eta, scale = sigma_eta/snr_obs).rvs((int(n_draws),len(q))).T
-    return eta_samples
-#    return q_from_eta(eta_samples)
+    q_samples = truncnorm(a = -q/(q*sigma_q/snr_obs), b = (1.-q)/(q*sigma_q/snr_obs), loc = q, scale = q*sigma_q/snr_obs).rvs((int(n_draws),len(q))).T
+    return q_samples
 
 def w_sampler(w, snr_obs, n_draws = 1e3):
     """

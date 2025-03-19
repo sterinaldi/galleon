@@ -10,7 +10,7 @@ from galleon.settings import omega
 mass_parameters_list = ['m1m2', 'm1q']
 
 class Generator:
-    def __init__(self, bounds_m  = [10,100],
+    def __init__(self, bounds_m  = [2,100],
                        bounds_z  = None,
                        bounds_d  = None,
                        bounds_q  = None,
@@ -39,12 +39,12 @@ class Generator:
         if bounds_q is not None:
             self.bounds_q = bounds_q
         else:
-            self.bounds_q = [0.2,1.]
+            self.bounds_q = [0.1,1.]
         if bounds_z is not None:
             self.bounds_z = bounds_z
             self.bounds_d = [omega.LuminosityDistance(self.bounds_z[0]), omega.LuminosityDistance(self.bounds_z[1])]
         else:
-            self.bounds_z = [0.001, 2.3]
+            self.bounds_z = [0.001, 2.]
         if bounds_d is not None:
             self.bounds_d = bounds_d
             self.bounds_z = [omega.Redshift(bounds_d[0]), omega.Redshift(bounds_d[1])]
@@ -125,15 +125,10 @@ class Generator:
         # Masses
         m1_temp = rejection_sampler(int(n_samps), self.mass_distribution, self.bounds_m)
         if mass_pars == 'm1m2':
-            if self.mass_2_distribution is not None:
-                m2 = rejection_sampler(int(n_samps), self.mass_2_distribution, self.bounds_m)
-                m1 = m1_temp
-                p_m2 = self.mass_2_distribution(m2)
-            else:
-                m2_temp = rejection_sampler(int(n_samps), self.mass_distribution, self.bounds_m)
-                m1 = np.array([m1i if m1i > m2i else m2i for m1i, m2i in zip(m1_temp, m2_temp)])
-                m2 = np.array([m2i if m1i > m2i else m1i for m1i, m2i in zip(m1_temp, m2_temp)])
-                p_m2 = self.mass_distribution(m2)
+            m2_temp = rejection_sampler(int(n_samps), self.mass_distribution, self.bounds_m)
+            m1 = np.array([m1i if m1i > m2i else m2i for m1i, m2i in zip(m1_temp, m2_temp)])
+            m2 = np.array([m2i if m1i > m2i else m1i for m1i, m2i in zip(m1_temp, m2_temp)])
+            p_m2 = self.mass_distribution(m2)
         if mass_pars == 'm1q':
             q  = rejection_sampler(int(n_samps), self.mass_ratio_distribution, self.bounds_q)
             m1 = m1_temp
@@ -194,7 +189,7 @@ class Generator:
             m2z_temp        = m2_temp*(1+z_temp)
             Mc_temp, q_temp = chirp_mass_q(m1z_temp, m2z_temp)
             # Generate SNRs
-            snr_opt_temp  = snr_optimal(m1_temp, m2_temp, z = z_temp, DL = DL_temp, sensitivity = sensitivity)
+            snr_opt_temp  = snr_optimal(m1z_temp, m2z_temp, z = z_temp, DL = DL_temp, sensitivity = sensitivity)
             snr_true_temp = w_temp*snr_opt_temp
             snr_obs_temp  = np.abs(snr_sampler(snr_true_temp))
             acc = len(np.where(snr_obs_temp > self.snr_cut)[0])
@@ -276,10 +271,18 @@ class Generator:
         w_events  = w_sampler(w, snr_obs, int(n_samps))
         # Transform to (m1z, m2z, DL, w)
         m1z_events, m2z_events = component_masses(Mc_events, q_events)
-        DL_and_snr  = np.array([obs_distance_snr(m1z_i, m2z_i, z_i, w_i, snr_i, bounds_m = self.bounds_m) for m1z_i, m2z_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, z, w_events, snr_obs), desc = 'Sampling DL and SNR', total = n_events)])
+        DL_and_snr  = np.atleast_2d([obs_distance_snr(m1z_i, m2z_i, w_i, snr_i) for m1z_i, m2z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, w_events, snr_obs), desc = 'Sampling DL and SNR', total = n_events)])
         DL_events   = DL_and_snr[:,0,:]
         snr_events  = DL_and_snr[:,1,:]
-        z_events    = np.array([omega.Redshift(DL_i) for DL_i in tqdm(DL_events, desc = 'Converting to z', total = n_events)])
+        DL_events[DL_events < 0.1] = 0.1
+        snr_events  = np.atleast_2d(snr_events)
+        DL_events   = np.atleast_2d(DL_events)
+        Mc_events   = np.atleast_2d(Mc_events)
+        q_events    = np.atleast_2d(q_events)
+        w_events    = np.atleast_2d(w_events)
+        m1z_events  = np.atleast_2d(m1z_events)
+        m2z_events  = np.atleast_2d(m2z_events)
+        z_events    = np.atleast_2d([omega.Redshift(DL_i) for DL_i in tqdm(DL_events, desc = 'Converting to z', total = n_events)])
         # Final lists
         m1_final = []
         m2_final = []

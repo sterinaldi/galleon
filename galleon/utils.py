@@ -8,6 +8,7 @@ from pycbc.psd.analytical import from_string
 from pycbc.filter import sigma
 
 from galleon.settings import d_fid, z_fid, p_w_1det, p_w_3det
+from galleon.samplers import snr_sampler
 
 def q_from_eta(eta):
     return ((1-2*eta) - np.sqrt((2*eta-1)**2 - 4*eta**2))/(2*eta)
@@ -24,10 +25,10 @@ def component_masses(Mc, q):
         :np.ndarray: detector-frame primary mass
         :np.ndarray: detector-frame secondary mass
     """
-    eta = q/(1+q)**2
+    eta = q/((1+q)**2)
     M   = Mc/(eta**(3./5.))
-    m1  = M*(1 + np.sqrt(1. - 4.*eta))/2.
-    m2  = M*(1 - np.sqrt(1. - 4.*eta))/2.
+    m1  = M/(1+q)
+    m2  = m1*q
     return m1, m2
 
 def chirp_mass_q(m1, m2):
@@ -62,14 +63,14 @@ def chirp_mass_eta(m1, m2):
     eta  = m1*m2/((m1+m2)**2)
     return Mc, eta
 
-def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd = 'aLIGOZeroDetHighPower', deltaf = 1/16., flow = 20., bounds_m = None, sensitivity = False):
+def snr_optimal(m1z, m2z, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd = 'aLIGOZeroDetHighPower', deltaf = 1/16., flow = 20., bounds_m = None, sensitivity = False):
     '''
     Compute the SNR from m1, m2, z.
     Follows Davide Gerosa's code (https://github.com/dgerosa/gwdet).
     
     Arguments:
-        :np.ndarray m1:   source-frame primary masses
-        :np.ndarray m2:   source-frame secondary masses
+        :np.ndarray m1z:   detector-frame primary masses
+        :np.ndarray m2z:   detector-frame secondary masses
         :np.ndarray z:    source redshifts
         :str approximant: waveform approximant
         :str psd:         psd to be used
@@ -80,7 +81,7 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
     Returns:
         :np.ndarray: optimal SNRs
     '''
-    snr = np.zeros(len(m1))
+    snr = np.zeros(len(m1z))
     if DL is None and z is None:
         raise ValueError("Please provide DL and/or z.")
     if DL is None:
@@ -88,25 +89,20 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
     if z is None:
         z = omega.Redshift(DL)
     
-    if bounds_m is not None:
-        idx = (m1 > bounds_m[0]) & (m1 < bounds_m[1])
-    else:
-        idx = np.ones(len(m1))
-    
     if sensitivity:
-        loop = tqdm(enumerate(zip(m1, m2, z, DL, idx)), desc = 'Generating sensitivity estimate', total = len(m1))
+        loop = tqdm(enumerate(zip(m1z, m2z, z, DL)), desc = 'Generating sensitivity estimate', total = len(m1z))
     else:
-        loop = enumerate(zip(m1, m2, z, DL, idx))
+        loop = enumerate(zip(m1z, m2z, z, DL))
     
-    for i, (m1i, m2i, zi, Di, idxi) in loop:
+    for i, (m1zi, m2zi, zi, Di) in loop:
         # FIXME: add spin parameters!
         # Check WF validity
         if approximant == 'IMRPhenomXPHM':
-            if m1i/m2i > 20.:
+            if m1zi/m2zi > 20.:
                 continue
         hp, hc = get_fd_waveform(approximant = approximant,
-                                 mass1       = m1i*(1.+zi),
-                                 mass2       = m2i*(1.+zi),
+                                 mass1       = m1zi,
+                                 mass2       = m2zi,
                                  delta_f     = deltaf,
                                  f_lower     = flow,
                                  distance    = Di,
@@ -121,14 +117,13 @@ def snr_optimal(m1, m2, z = None, DL = None, approximant = 'IMRPhenomXPHM', psd 
         snr[i] = sigma(hp, psd=evaluatedpsd, low_frequency_cutoff=flow)
     return snr
 
-def obs_distance_snr(m1_obs, m2_obs, z, w_obs, snr_obs, bounds_m = None):
+def obs_distance_snr(m1_obs, m2_obs, w_obs, snr_obs, bounds_m = None):
     """
     Compute the observed luminosity distance given detector-frame masses, redshift, w and SNR.
     
     Arguments:
         :np.ndarray m1_obs:  detector-frame primary mass
         :np.ndarray m2_obs:  detector-frame secondary mass
-        :double z:           true redshift
         :np.ndarray w_obs:   observed w
         :np.ndarray snr_obs: observed SNR
         :iter bounds_m:   mass bounds
@@ -137,9 +132,10 @@ def obs_distance_snr(m1_obs, m2_obs, z, w_obs, snr_obs, bounds_m = None):
         :np.ndarray: observed luminosity distance
         :np.ndarray
     """
-    snr_opt = snr_optimal(m1_obs/(1+z), m2_obs/(1+z), np.ones(len(m1_obs))*z_fid, np.ones(len(m1_obs))*d_fid, bounds_m = bounds_m)
-    return d_fid*w_obs*snr_opt/snr_obs, snr_opt
-
+    snr_opt = snr_optimal(m1_obs, m2_obs, z = np.ones(len(m1_obs))*z_fid, DL = np.ones(len(m1_obs))*d_fid)
+    dl_obs = d_fid*w_obs*snr_opt/snr_obs
+    return dl_obs, snr_opt
+    
 def PE_prior(w, DL, volume = 1., n_det  = 'one'):
     """
     Prior used in PE runs.
@@ -177,7 +173,7 @@ def jacobian(m1, m2, DL, z, w, snr):
     """
     snr_opt = snr*d_fid/DL
     Mc, eta = chirp_mass_eta(m1, m2)
-    return w*snr_opt*(d_fid/DL**2)*((m1-m2)/(m1+m2)**2)*(eta**(3./5.))
+    return w*snr_opt*(d_fid/DL**2)*Mc/(m1**2)#((m1-m2)/(m1+m2)**2)*(eta**(3./5.))
 
 def save_event(m1, m2, Mc, q, z, DL, snr, name = 'injections', out_folder = '.'):
     """
