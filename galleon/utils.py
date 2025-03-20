@@ -248,15 +248,15 @@ def save_injections(m1, m2, Mc, q, z, DL, snr, p_m1, p_m2, p_z, p_dl, n_total, n
         ps.attrs['total_generated'] = n_total
         ps.attrs['analysis_time_s'] = (60.*60.*24.*365)
         # Dictionary
-        dict_v = {'mass_1_source': m1,
-                  'mass_2_source': m2,
-                  'mass_1': m1*(1+z),
-                  'mass_2': m2*(1+z),
+        dict_v = {'mass1_source': m1,
+                  'mass2_source': m2,
+                  'mass1': m1*(1+z),
+                  'mass2': m2*(1+z),
                   'chirp_mass_source': Mc,
                   'total_mass_source': m1+m2,
                   'mass_ratio': q,
                   'redshift': z,
-                  'luminosity_distance': DL,
+                  'distance': DL,
                   'mass1_source_sampling_pdf': p_m1,
                   'mass1_source_mass2_source_sampling_pdf': p_m1*p_m2,
                   'redshift_sampling_pdf': p_z,
