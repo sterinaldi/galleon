@@ -44,7 +44,7 @@ class Generator:
             self.bounds_z = bounds_z
             self.bounds_d = [omega.LuminosityDistance(self.bounds_z[0]), omega.LuminosityDistance(self.bounds_z[1])]
         else:
-            self.bounds_z = [0.001, 2.]
+            self.bounds_z = [0.001, 2.3]
         if bounds_d is not None:
             self.bounds_d = bounds_d
             self.bounds_z = [omega.Redshift(bounds_d[0]), omega.Redshift(bounds_d[1])]
@@ -293,7 +293,8 @@ class Generator:
         # Reweight to account for prior
         for m1z_i, m2z_i, Mc_i, DL_i, z_i, w_i, snr_i in tqdm(zip(m1z_events, m2z_events, Mc_events, DL_events, z_events, w_events, snr_events), desc = 'Reweighting posteriors', total = n_events):
             idx_snr = np.where(snr_i > 0.)[0]
-            p  = PE_prior(w_i[idx_snr], DL_i[idx_snr], n_det = self.n_det, volume = self.volume)*jacobian(m1z_i[idx_snr], m2z_i[idx_snr], DL_i[idx_snr], z_i[idx_snr], w_i[idx_snr], snr_i[idx_snr])
+#            p  = PE_prior(w_i[idx_snr], DL_i[idx_snr], n_det = self.n_det, volume = self.volume)*jacobian(m1z_i[idx_snr], m2z_i[idx_snr], DL_i[idx_snr], z_i[idx_snr], w_i[idx_snr], snr_i[idx_snr])
+            p = np.ones(len(m1z_i))
             if len(p) == 0:
                 # fix for irrealistic events
                 p = np.ones(len(m1z_i))
